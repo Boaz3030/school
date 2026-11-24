@@ -18,21 +18,32 @@ Klik in het script rechtsboven op het icoon **Copy raw file** en plak alles in A
 1. Sluit de LED aan: pin D1 → weerstand 220 Ω → LED (lange poot) → korte poot naar GND.
 2. Installeer in Arduino IDE het bordpakket **esp8266** en de bibliotheek **PubSubClient** (Nick O'Leary).
 3. Kopieer `esp_lamp_online.ino` naar Arduino IDE en upload. Je hoeft geen wifi in te vullen.
-4. Verbind je gsm met wifi **ESP-Lamp-Setup** (wachtwoord **lamp1234**). Er opent een pagina; kies daar je wifi en typ het wachtwoord. Een laadicoon toont of de ESP nog zoekt, verbonden is of het mislukt is.
-5. Open de interface: **https://boaz3030.github.io/school/**. Bovenaan staat "ESP online" met een groene stip; daarna werken AAN en UIT.
+4. Verbind je gsm met wifi **ESP-Lamp** (wachtwoord **lamp1234**) en open **http://192.168.4.1** (opent vaak vanzelf).
+   Daar bedien je de lamp meteen, ook zonder internet.
+5. Tik rechtsboven op het **wifi icoon**, kies je netwerk, typ het wachtwoord en tik op **Verbinden**.
+   Een laadicoon toont of de ESP nog zoekt; daarna een groen ✓ of een rood ✗.
+6. Nu werkt de lamp ook via internet: **https://boaz3030.github.io/school/**
 
-## Ander wifinetwerk
+## Wifi knop (rechtsboven)
 
-Niet opnieuw uploaden. De ESP onthoudt zijn laatste netwerk, ook zonder stroom.
-Vindt hij dat netwerk niet binnen 15 seconden, dan maakt hij zelf **ESP-Lamp-Setup** aan (stap 4).
-Is hij nog online, tik dan in de interface op **Wifi wijzigen**.
+- **Op de ESP pagina (192.168.4.1):** netwerk kiezen, of **Alleen lokaal ESP netwerk** (de ESP vergeet zijn wifi).
+- **Op de GitHub pagina:** toont het huidige netwerk en kan de ESP naar **alleen lokaal** zetten.
+  Een nieuw netwerk kies je op de ESP pagina, zodat je wachtwoord niet over het openbare internet gaat.
+
+De ESP onthoudt zijn netwerk, ook zonder stroom. Vindt hij het niet, dan probeert hij elke minuut opnieuw;
+zijn eigen wifi **ESP-Lamp** blijft altijd werken.
 
 ## Seriële monitor (115200 baud)
 
-Toont welk netwerk hij probeert, of het lukt, het IP adres, de MQTT verbinding en elke keer dat de lamp aan of uit gaat.
+Toont de eigen wifi, welk netwerk hij probeert, of het lukt (met IP adres), de MQTT verbinding en elke keer dat de lamp aan of uit gaat.
 
 ## Hoe het werkt
 
-De ESP en de webpagina verbinden allebei met de openbare MQTT server `broker.hivemq.com`.
-De pagina stuurt `aan`, `uit` of `wifi` naar `esplamp/78lb4mti/zet`.
-De ESP meldt de lamp op `esplamp/78lb4mti/status` en `online` of `offline` op `esplamp/78lb4mti/online`.
+De ESP en de GitHub pagina verbinden allebei met de openbare MQTT server `broker.hivemq.com`.
+De pagina stuurt `aan`, `uit` of `lokaal` naar `esplamp/78lb4mti/zet`.
+De ESP meldt de lamp op `.../status`, `online` of `offline` op `.../online`, en zijn netwerk op `.../netwerk`.
+
+## Onderhoud
+
+De bedieningspagina staat op één plek: `index.html`. De ESP heeft er een kopie van in de sketch.
+Na een wijziging: `python3 onderhoud/maak_sketch.py` (maakt `esp_lamp_online.ino` opnieuw uit `onderhoud/sketch_bron.ino`).
