@@ -2,6 +2,12 @@
 
 Een LED op een ESP8266 die je aan en uit zet met twee knoppen op een webpagina.
 
+## 👉 [Open de interface (knoppen AAN en UIT)](https://boaz3030.github.io/school/)
+
+## 👉 [Open het script voor Arduino IDE](esp_lamp_online.ino)
+
+Klik in het script rechtsboven op het icoon **Copy raw file** en plak alles in Arduino IDE.
+
 ## Bestanden
 
 - `esp_lamp_online.ino`: de sketch voor Arduino IDE.
