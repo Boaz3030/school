@@ -14,8 +14,8 @@ const char* WIFI_WACHTWOORD = "jouw_wachtwoord";
 const char* ONDERWERP_ZET    = "esplamp/78lb4mti/zet";
 const char* ONDERWERP_STATUS = "esplamp/78lb4mti/status";
 
-const int  LED_PIN         = D1;     // D1 -> 220 ohm -> LED -> GND
-const bool LED_ACTIEF_LAAG = false;  // true voor de ingebouwde LED (LED_PIN = D4)
+const int  LED_PIN         = 5;      // 5 = pin D1 op het bord. D1 -> 220 ohm -> LED -> GND
+const bool LED_ACTIEF_LAAG = false;  // true voor de ingebouwde LED (LED_PIN = 2, dat is D4)
 // ----------------------------------
 
 const char* BROKER = "broker.hivemq.com";
