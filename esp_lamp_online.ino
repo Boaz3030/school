@@ -5,8 +5,10 @@
 //    Verbind je gsm daarmee en open http://192.168.4.1: daar bedien je de lamp,
 //    ook zonder internet. Rechtsboven zit de wifiknop: kies daar een netwerk
 //    of kies "Alleen lokaal ESP netwerk".
+//  - Zit je gsm op hetzelfde wifi als de ESP: open http://esp-lamp.local
+//    (of het IP adres uit de Seriële monitor), ook zonder internet.
 //  - Is de ESP met een wifinetwerk met internet verbonden, dan werkt de lamp
-//    ook op https://boaz3030.github.io/school/
+//    ook van overal op https://boaz3030.github.io/school/
 //  - De ESP onthoudt het gekozen netwerk, ook zonder stroom.
 //
 // Nodig: bibliotheek "PubSubClient" van Nick O'Leary (Bibliotheekbeheer).
@@ -17,6 +19,7 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <DNSServer.h>
+#include <ESP8266mDNS.h>
 #include <PubSubClient.h>
 
 // ---------- Instellingen ----------
@@ -28,6 +31,7 @@ const char* T_ZET     = "esplamp/78lb4mti/zet";
 const char* T_STATUS  = "esplamp/78lb4mti/status";
 const char* T_ONLINE  = "esplamp/78lb4mti/online";
 const char* T_NETWERK = "esplamp/78lb4mti/netwerk";
+const char* T_IP      = "esplamp/78lb4mti/ip";
 
 const int  LED_PIN         = 5;      // 5 = pin D1 op het bord. D1 -> 220 ohm -> LED -> GND
 const bool LED_ACTIEF_LAAG = false;  // true voor de ingebouwde LED (LED_PIN = 2, dat is D4)
@@ -129,6 +133,8 @@ const char PAGINA[] PROGMEM = R"rawliteral(
   .uitleg { padding: 14px; border-radius: 16px; font-size: 14px; line-height: 1.5; text-align: left;
     background: rgba(77,163,255,0.12); border: 1px solid rgba(77,163,255,0.4); }
   .status { display: flex; align-items: center; gap: 12px; margin-top: 16px; min-height: 24px; font-size: 15px; text-align: left; }
+  .link { display: block; margin: 8px 0 12px; padding: 10px 14px; border-radius: 999px; text-align: center; font-weight: 700;
+    color: #fff; text-decoration: none; background: #2f80ed; box-shadow: 0 0 14px #2f80ed; }
   .ok { color: #2ecc71; } .fout { color: #ff6b6b; }
   .icoon { font-size: 22px; flex: none; }
 </style>
@@ -149,6 +155,7 @@ const char PAGINA[] PROGMEM = R"rawliteral(
     </div>
     <div class="tekst" id="tekst">Wachten op lamp...</div>
     <div class="verbinding" id="verbinding"></div>
+    <button class="klein" id="hulp" style="display:none; margin-top:10px">ESP niet online? Bedien hem op hetzelfde wifi</button>
   </div>
 
   <div class="achter" id="achter">
@@ -165,11 +172,14 @@ const char PAGINA[] PROGMEM = R"rawliteral(
       </div>
 
       <div id="onlineDeel" class="uitleg">
-        <b>Ander netwerk kiezen</b><br>
-        Je wachtwoord typ je op de pagina van de ESP zelf, zodat het niet over het openbare internet gaat.<br>
-        1. Verbind je gsm met wifi <b>ESP-Lamp</b> (wachtwoord <b>lamp1234</b>).<br>
-        2. Open <b>http://192.168.4.1</b>.<br>
-        3. Tik rechtsboven op het wifi icoon en kies je netwerk.
+        <b>Lamp bedienen op hetzelfde wifi</b><br>
+        Zit je gsm op hetzelfde wifi als de ESP? Open dan de pagina van de ESP zelf. Die werkt ook zonder internet.
+        <a class="link" href="http://esp-lamp.local">http://esp-lamp.local</a>
+        <a class="link" id="linkIp" href="#" style="display:none"></a>
+        <b>ESP verbinden met een netwerk</b><br>
+        Verbind je gsm met wifi <b>ESP-Lamp</b> (wachtwoord <b>lamp1234</b>), open
+        <a class="link" href="http://192.168.4.1">http://192.168.4.1</a>
+        en tik daar rechtsboven op het wifi icoon. Daar zie je alle netwerken in de buurt.
       </div>
 
       <button class="tweede" id="lokaal">Alleen lokaal ESP netwerk</button>
@@ -183,7 +193,7 @@ const char PAGINA[] PROGMEM = R"rawliteral(
   const ONLINE = location.hostname.endsWith('github.io') || location.search.includes('online');
   const CODE = '78lb4mti';
   const T_ZET = 'esplamp/' + CODE + '/zet', T_STATUS = 'esplamp/' + CODE + '/status';
-  const T_ONLINE = 'esplamp/' + CODE + '/online', T_NETWERK = 'esplamp/' + CODE + '/netwerk';
+  const T_ONLINE = 'esplamp/' + CODE + '/online', T_NETWERK = 'esplamp/' + CODE + '/netwerk', T_IP = 'esplamp/' + CODE + '/ip';
 
   const $ = id => document.getElementById(id);
   const kaart = $('kaart'), knopAan = $('aan'), knopUit = $('uit');
@@ -200,6 +210,7 @@ const char PAGINA[] PROGMEM = R"rawliteral(
     const b = document.createElement('span'); b.textContent = tekst;
     e.append(a, b);
     knopAan.disabled = !ok; knopUit.disabled = !ok;
+    if (ONLINE) $('hulp').style.display = ok ? 'none' : 'inline-block';
   }
   function toonHuidig(netwerk, verbonden) {
     $('huidig').textContent = netwerk
@@ -217,6 +228,7 @@ const char PAGINA[] PROGMEM = R"rawliteral(
     s.append(a, b);
   }
 
+  $('hulp').onclick = () => $('wifiknop').click();
   $('wifiknop').onclick = () => { $('achter').classList.add('open'); toonStatus(); if (!ONLINE) zoekNetwerken(); };
   $('sluit').onclick = () => $('achter').classList.remove('open');
   $('achter').onclick = e => { if (e.target.id === 'achter') $('achter').classList.remove('open'); };
@@ -231,13 +243,14 @@ const char PAGINA[] PROGMEM = R"rawliteral(
     s.onerror = () => toonEsp(false, 'Geen internet');
     s.onload = () => {
       client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt');
-      client.on('connect', () => { $('verbinding').textContent = 'Via internet'; client.subscribe([T_STATUS, T_ONLINE, T_NETWERK]); });
+      client.on('connect', () => { $('verbinding').textContent = 'Via internet'; client.subscribe([T_STATUS, T_ONLINE, T_NETWERK, T_IP]); });
       client.on('close', () => { $('verbinding').textContent = 'Geen verbinding met internet'; toonEsp(false, 'Wachten op internet...'); });
       client.on('message', (t, d) => {
         const x = d.toString();
         if (t === T_ONLINE) toonEsp(x === 'online', x === 'online' ? 'ESP online' : 'ESP zoekt verbinding...');
         else if (t === T_STATUS) toonLamp(x === 'aan');
         else if (t === T_NETWERK) toonHuidig(x, true);
+        else if (t === T_IP && x) { const l = $('linkIp'); l.href = 'http://' + x; l.textContent = 'http://' + x; l.style.display = 'block'; }
       });
     };
     document.head.append(s);
@@ -471,6 +484,7 @@ void probeerMqtt() {
     mqtt.publish(T_ONLINE, "online", true);
     mqtt.publish(T_STATUS, lampAan ? "aan" : "uit", true);
     mqtt.publish(T_NETWERK, WiFi.SSID().c_str(), true);
+    mqtt.publish(T_IP, WiFi.localIP().toString().c_str(), true);
   } else {
     Serial.print(" mislukt, code ");
     Serial.println(mqtt.state());
@@ -498,6 +512,9 @@ void setup() {
   server.onNotFound(paginaOnbekend);
   server.begin();
 
+  // Op hetzelfde wifi bereikbaar als http://esp-lamp.local
+  if (MDNS.begin("esp-lamp")) MDNS.addService("http", "tcp", 80);
+
   mqtt.setServer(BROKER, 1883);
   mqtt.setCallback(bericht);
 
@@ -523,6 +540,7 @@ void setup() {
 void loop() {
   dns.processNextRequest();
   server.handleClient();
+  MDNS.update();
   beheerWifi();
 
   static bool wasVerbonden = false;
@@ -531,6 +549,8 @@ void loop() {
     Serial.print("Wifi verbonden met '");
     Serial.print(WiFi.SSID());
     Serial.print("', IP ");
+    Serial.println(WiFi.localIP());
+    Serial.print("Op hetzelfde wifi: http://esp-lamp.local of http://");
     Serial.println(WiFi.localIP());
   }
   wasVerbonden = verbonden;

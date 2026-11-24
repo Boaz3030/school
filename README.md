@@ -23,6 +23,18 @@ Klik in het script rechtsboven op het icoon **Copy raw file** en plak alles in A
 5. Tik rechtsboven op het **wifi icoon**, kies je netwerk, typ het wachtwoord en tik op **Verbinden**.
    Een laadicoon toont of de ESP nog zoekt; daarna een groen ✓ of een rood ✗.
 6. Nu werkt de lamp ook via internet: **https://boaz3030.github.io/school/**
+7. Zit je gsm op hetzelfde wifi als de ESP, dan werkt ook **http://esp-lamp.local** (of het IP adres uit de Seriële monitor), zelfs zonder internet.
+
+## Welke link wanneer
+
+| Situatie | Link |
+|---|---|
+| ESP heeft internet | https://boaz3030.github.io/school/ (van overal) |
+| Gsm en ESP op hetzelfde wifi | http://esp-lamp.local of het IP adres |
+| ESP heeft geen wifi | verbind met wifi ESP-Lamp, open http://192.168.4.1 |
+
+De GitHub pagina kan de ESP niet rechtstreeks via het eigen wifi bedienen: de browser blokkeert dat voor beveiligde (https) pagina's.
+Daarom staan de lokale links in het wifipaneel van de GitHub pagina.
 
 ## Wifi knop (rechtsboven)
 

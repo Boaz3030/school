@@ -5,8 +5,10 @@
 //    Verbind je gsm daarmee en open http://192.168.4.1: daar bedien je de lamp,
 //    ook zonder internet. Rechtsboven zit de wifiknop: kies daar een netwerk
 //    of kies "Alleen lokaal ESP netwerk".
+//  - Zit je gsm op hetzelfde wifi als de ESP: open http://esp-lamp.local
+//    (of het IP adres uit de Seriële monitor), ook zonder internet.
 //  - Is de ESP met een wifinetwerk met internet verbonden, dan werkt de lamp
-//    ook op https://boaz3030.github.io/school/
+//    ook van overal op https://boaz3030.github.io/school/
 //  - De ESP onthoudt het gekozen netwerk, ook zonder stroom.
 //
 // Nodig: bibliotheek "PubSubClient" van Nick O'Leary (Bibliotheekbeheer).
@@ -17,6 +19,7 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <DNSServer.h>
+#include <ESP8266mDNS.h>
 #include <PubSubClient.h>
 
 // ---------- Instellingen ----------
@@ -28,6 +31,7 @@ const char* T_ZET     = "esplamp/78lb4mti/zet";
 const char* T_STATUS  = "esplamp/78lb4mti/status";
 const char* T_ONLINE  = "esplamp/78lb4mti/online";
 const char* T_NETWERK = "esplamp/78lb4mti/netwerk";
+const char* T_IP      = "esplamp/78lb4mti/ip";
 
 const int  LED_PIN         = 5;      // 5 = pin D1 op het bord. D1 -> 220 ohm -> LED -> GND
 const bool LED_ACTIEF_LAAG = false;  // true voor de ingebouwde LED (LED_PIN = 2, dat is D4)
@@ -219,6 +223,7 @@ void probeerMqtt() {
     mqtt.publish(T_ONLINE, "online", true);
     mqtt.publish(T_STATUS, lampAan ? "aan" : "uit", true);
     mqtt.publish(T_NETWERK, WiFi.SSID().c_str(), true);
+    mqtt.publish(T_IP, WiFi.localIP().toString().c_str(), true);
   } else {
     Serial.print(" mislukt, code ");
     Serial.println(mqtt.state());
@@ -246,6 +251,9 @@ void setup() {
   server.onNotFound(paginaOnbekend);
   server.begin();
 
+  // Op hetzelfde wifi bereikbaar als http://esp-lamp.local
+  if (MDNS.begin("esp-lamp")) MDNS.addService("http", "tcp", 80);
+
   mqtt.setServer(BROKER, 1883);
   mqtt.setCallback(bericht);
 
@@ -271,6 +279,7 @@ void setup() {
 void loop() {
   dns.processNextRequest();
   server.handleClient();
+  MDNS.update();
   beheerWifi();
 
   static bool wasVerbonden = false;
@@ -279,6 +288,8 @@ void loop() {
     Serial.print("Wifi verbonden met '");
     Serial.print(WiFi.SSID());
     Serial.print("', IP ");
+    Serial.println(WiFi.localIP());
+    Serial.print("Op hetzelfde wifi: http://esp-lamp.local of http://");
     Serial.println(WiFi.localIP());
   }
   wasVerbonden = verbonden;
