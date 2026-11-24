@@ -1,51 +1,36 @@
-// ESP8266 lamp: bedienen via internet en via de eigen wifi van de ESP.
+// ESP8266 lamp met één bedieningspagina.
 //
 // Werking:
 //  - De ESP maakt altijd zijn eigen wifi "ESP-Lamp" (wachtwoord lamp1234).
-//    Verbind je gsm daarmee en open http://192.168.4.1: daar bedien je de lamp,
-//    ook zonder internet. Rechtsboven zit de wifiknop: kies daar een netwerk
-//    of kies "Alleen lokaal ESP netwerk".
-//  - Zit je gsm op hetzelfde wifi als de ESP: open http://esp-lamp.local
-//    (of het IP adres uit de Seriële monitor), ook zonder internet.
-//  - Is de ESP met een wifinetwerk met internet verbonden, dan werkt de lamp
-//    ook van overal op https://boaz3030.github.io/school/
-//  - De ESP onthoudt het gekozen netwerk, ook zonder stroom.
+//  - Open de pagina op hetzelfde wifi als de ESP:  http://esp-lamp.local
+//    (lukt dat niet: het IP adres uit de Seriële monitor; op ESP-Lamp ook http://192.168.4.1)
+//  - Rechtsboven op de pagina zit de wifiknop: kies daar een netwerk voor de ESP,
+//    of "Alleen ESP netwerk". De ESP onthoudt het netwerk, ook zonder stroom.
+//  - Zit je gsm op hetzelfde netwerk als de ESP, dan bedien je de lamp. Internet is niet nodig.
 //
-// Nodig: bibliotheek "PubSubClient" van Nick O'Leary (Bibliotheekbeheer).
+// Geen extra bibliotheken nodig: alles zit in het esp8266 bordpakket.
 //
-// LET OP: dit bestand wordt gemaakt door onderhoud/maak_sketch.py uit
-// onderhoud/sketch_bron.ino en index.html. Pas die aan, niet de kopie.
+// LET OP: esp_lamp_online.ino wordt gemaakt door onderhoud/maak_sketch.py uit
+// onderhoud/sketch_bron.ino en onderhoud/pagina.html. Pas die aan, niet de kopie.
 
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <DNSServer.h>
 #include <ESP8266mDNS.h>
-#include <PubSubClient.h>
 
 // ---------- Instellingen ----------
 const char* ESP_NAAM       = "ESP-Lamp";
-const char* ESP_WACHTWOORD = "lamp1234";       // minstens 8 tekens
-
-// Moet gelijk zijn aan CODE in index.html
-const char* T_ZET     = "esplamp/78lb4mti/zet";
-const char* T_STATUS  = "esplamp/78lb4mti/status";
-const char* T_ONLINE  = "esplamp/78lb4mti/online";
-const char* T_NETWERK = "esplamp/78lb4mti/netwerk";
-const char* T_IP      = "esplamp/78lb4mti/ip";
+const char* ESP_WACHTWOORD = "lamp1234";   // minstens 8 tekens
+const char* ADRES_NAAM     = "esp-lamp";   // geeft http://esp-lamp.local
 
 const int  LED_PIN         = 5;      // 5 = pin D1 op het bord. D1 -> 220 ohm -> LED -> GND
 const bool LED_ACTIEF_LAAG = false;  // true voor de ingebouwde LED (LED_PIN = 2, dat is D4)
 // ----------------------------------
 
-const char* BROKER = "broker.hivemq.com";
-
 ESP8266WebServer server(80);
 DNSServer dns;
-WiFiClient net;
-PubSubClient mqtt(net);
 
 bool lampAan = false;
-unsigned long laatsteMqttPoging = 0;
 
 // Opnieuw proberen van het opgeslagen netwerk, met pauzes zodat de eigen wifi stabiel blijft
 unsigned long probeerStart = 0;
@@ -64,7 +49,6 @@ void zetLamp(bool aan) {
   lampAan = aan;
   bool niveau = LED_ACTIEF_LAAG ? !aan : aan;
   digitalWrite(LED_PIN, niveau ? HIGH : LOW);
-  if (mqtt.connected()) mqtt.publish(T_STATUS, aan ? "aan" : "uit", true);
   Serial.println(aan ? "Lamp aan" : "Lamp uit");
 }
 
@@ -89,7 +73,8 @@ bool wifiVerbonden() { return WiFi.status() == WL_CONNECTED; }
 void paginaStatus() {
   String j = "{\"aan\":" + String(lampAan ? "true" : "false") +
              ",\"netwerk\":\"" + jsonTekst(WiFi.SSID()) + "\"" +
-             ",\"verbonden\":" + String(wifiVerbonden() ? "true" : "false") + "}";
+             ",\"verbonden\":" + String(wifiVerbonden() ? "true" : "false") +
+             ",\"ip\":\"" + WiFi.localIP().toString() + "\"}";
   server.send(200, "application/json", j);
 }
 
@@ -123,7 +108,6 @@ void paginaVerbind() {
   String wachtwoord = server.arg("wachtwoord");
   Serial.print("Nieuw netwerk gekozen: ");
   Serial.println(gekozenNaam);
-  if (mqtt.connected()) { mqtt.publish(T_ONLINE, "offline", true); mqtt.disconnect(); }
   WiFi.begin(gekozenNaam.c_str(), wachtwoord.c_str());   // wordt ook onthouden
   toestand = ZOEKEN;
   zoekStart = millis();
@@ -135,23 +119,19 @@ void paginaVerbind() {
 void paginaToestand() {
   const char* t = toestand == ZOEKEN ? "zoeken" : toestand == VERBONDEN ? "verbonden"
                 : toestand == MISLUKT ? "mislukt" : "wacht";
-  String j = "{\"t\":\"" + String(t) + "\",\"naam\":\"" + jsonTekst(gekozenNaam) + "\"}";
+  String j = "{\"t\":\"" + String(t) + "\",\"naam\":\"" + jsonTekst(gekozenNaam) +
+             "\",\"ip\":\"" + WiFi.localIP().toString() + "\"}";
   server.send(200, "application/json", j);
 }
 
-void gaLokaal() {
-  Serial.println("Alleen lokaal ESP netwerk");
-  if (mqtt.connected()) { mqtt.publish(T_ONLINE, "offline", true); mqtt.disconnect(); }
+void paginaLokaal() {
+  server.send(200, "application/json", "{\"ok\":true}");
+  Serial.println("Alleen ESP netwerk");
   WiFi.disconnect();      // verlaat het netwerk en vergeet het
   toestand = WACHT;
   gekozenNaam = "";
   pauze = false;
   probeerStart = 0;
-}
-
-void paginaLokaal() {
-  server.send(200, "application/json", "{\"ok\":true}");
-  gaLokaal();
 }
 
 void paginaOnbekend() {
@@ -169,10 +149,6 @@ void beheerWifi() {
     // Eerst 1 s wachten, zodat een oude verbinding niet als geslaagd telt
     if (verbonden && millis() - zoekStart > 1000 && WiFi.SSID() == gekozenNaam) {
       toestand = VERBONDEN;
-      Serial.print("Wifi verbonden met ");
-      Serial.print(WiFi.SSID());
-      Serial.print(", IP ");
-      Serial.println(WiFi.localIP());
     } else if (WiFi.status() == WL_CONNECT_FAILED || millis() - zoekStart > 20000) {
       toestand = MISLUKT;
       Serial.println("Wifi verbinden mislukt");
@@ -181,7 +157,7 @@ void beheerWifi() {
   }
 
   if (verbonden) { probeerStart = 0; pauze = false; return; }
-  if (WiFi.SSID().length() == 0) return;   // geen netwerk opgeslagen: alleen lokaal
+  if (WiFi.SSID().length() == 0) return;   // geen netwerk opgeslagen: alleen ESP-Lamp
 
   // Opgeslagen netwerk niet gevonden: 20 s proberen, 60 s pauze, opnieuw
   if (!pauze) {
@@ -198,35 +174,6 @@ void beheerWifi() {
     pauze = false;
     probeerStart = millis();
     WiFi.begin();
-  }
-}
-
-// ================= MQTT =================
-
-void bericht(char* onderwerp, byte* data, unsigned int lengte) {
-  String tekst;
-  for (unsigned int i = 0; i < lengte; i++) tekst += (char)data[i];
-  if (tekst == "aan") zetLamp(true);
-  else if (tekst == "uit") zetLamp(false);
-  else if (tekst == "lokaal") gaLokaal();
-}
-
-void probeerMqtt() {
-  if (millis() - laatsteMqttPoging < 5000) return;
-  laatsteMqttPoging = millis();
-  Serial.print("Verbinden met MQTT...");
-  String id = "esplamp-" + String(ESP.getChipId(), HEX);
-  // Laatste wil: valt de ESP weg, dan meldt de server zelf "offline"
-  if (mqtt.connect(id.c_str(), T_ONLINE, 0, true, "offline")) {
-    Serial.println(" gelukt");
-    mqtt.subscribe(T_ZET);
-    mqtt.publish(T_ONLINE, "online", true);
-    mqtt.publish(T_STATUS, lampAan ? "aan" : "uit", true);
-    mqtt.publish(T_NETWERK, WiFi.SSID().c_str(), true);
-    mqtt.publish(T_IP, WiFi.localIP().toString().c_str(), true);
-  } else {
-    Serial.print(" mislukt, code ");
-    Serial.println(mqtt.state());
   }
 }
 
@@ -251,19 +198,14 @@ void setup() {
   server.onNotFound(paginaOnbekend);
   server.begin();
 
-  // Op hetzelfde wifi bereikbaar als http://esp-lamp.local
-  if (MDNS.begin("esp-lamp")) MDNS.addService("http", "tcp", 80);
-
-  mqtt.setServer(BROKER, 1883);
-  mqtt.setCallback(bericht);
+  if (MDNS.begin(ADRES_NAAM)) MDNS.addService("http", "tcp", 80);
 
   Serial.println();
   Serial.print("Eigen wifi: '");
   Serial.print(ESP_NAAM);
   Serial.print("' (wachtwoord ");
   Serial.print(ESP_WACHTWOORD);
-  Serial.print("), bediening op http://");
-  Serial.println(WiFi.softAPIP());
+  Serial.println("), pagina op http://esp-lamp.local of http://192.168.4.1");
 
   if (WiFi.SSID().length() > 0) {
     Serial.print("Verbinden met opgeslagen wifi '");
@@ -272,7 +214,7 @@ void setup() {
     WiFi.begin();
     probeerStart = millis();
   } else {
-    Serial.println("Geen wifi opgeslagen: alleen lokaal ESP netwerk");
+    Serial.println("Geen wifi opgeslagen: alleen ESP-Lamp");
   }
 }
 
@@ -287,15 +229,8 @@ void loop() {
   if (verbonden && !wasVerbonden) {
     Serial.print("Wifi verbonden met '");
     Serial.print(WiFi.SSID());
-    Serial.print("', IP ");
-    Serial.println(WiFi.localIP());
-    Serial.print("Op hetzelfde wifi: http://esp-lamp.local of http://");
+    Serial.print("'. Pagina op dat netwerk: http://esp-lamp.local of http://");
     Serial.println(WiFi.localIP());
   }
   wasVerbonden = verbonden;
-
-  if (verbonden) {
-    if (!mqtt.connected()) probeerMqtt();
-    else mqtt.loop();
-  }
 }
